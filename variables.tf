@@ -12,6 +12,6 @@ variable "location" {
 
 variable "sql_admin_login" {
   type        = string
-  description = "O nome de usuário para o administrador do SQL Server."
+  description = "O nome de usuário para o adm do SQL Server."
   default     = "admintchungry"
 }
