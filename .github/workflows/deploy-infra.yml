@@ -87,31 +87,44 @@ jobs:
           echo "Database: $(terraform output -raw sql_database_name)"
           echo "Storage Account: $(terraform output -raw storage_account_name)"
 
-      # 10. Verifica SQL Server (NOVO!)
+      # 10. Verifica SQL Server
       - name: 'Verify SQL Server status'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           echo "🔍 Checking SQL Server status..."
-          SQL_SERVER=$(terraform output -raw sql_server_fqdn | cut -d'.' -f1)
-          az sql server show --name $SQL_SERVER --resource-group rg-tchungry-prod --query "{name:name, state:state, fullyQualifiedDomainName:fullyQualifiedDomainName}" -o table
+          SQL_SERVER_FQDN=$(terraform output -raw sql_server_fqdn)
+          SQL_SERVER=$(echo $SQL_SERVER_FQDN | cut -d'.' -f1)
+          echo "SQL Server name: $SQL_SERVER"
+          az sql server show \
+            --name $SQL_SERVER \
+            --resource-group rg-tchungry-prod \
+            --query "{name:name, state:state, fullyQualifiedDomainName:fullyQualifiedDomainName}" \
+            -o table
           echo "✅ SQL Server is ready!"
 
-      # 11. Verifica Storage Account (NOVO!)
+      # 11. Verifica Storage Account
       - name: 'Verify Storage Account status'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           echo "🔍 Checking Storage Account status..."
           STORAGE_NAME=$(terraform output -raw storage_account_name)
-          az storage account show --name $STORAGE_NAME --resource-group rg-tchungry-prod --query "{name:name, provisioningState:provisioningState, primaryEndpoints:primaryEndpoints.blob}" -o table
+          az storage account show \
+            --name $STORAGE_NAME \
+            --resource-group rg-tchungry-prod \
+            --query "{name:name, provisioningState:provisioningState, primaryEndpoints:primaryEndpoints.blob}" \
+            -o table
           echo "✅ Storage Account is ready!"
 
-      # 12. Lista containers do Storage (NOVO!)
+      # 12. Lista containers do Storage
       - name: 'List Storage containers'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           echo "📦 Listing Storage containers..."
           STORAGE_NAME=$(terraform output -raw storage_account_name)
-          az storage container list --account-name $STORAGE_NAME --query "[].{Name:name, PublicAccess:properties.publicAccess}" -o table
+          az storage container list \
+            --account-name $STORAGE_NAME \
+            --query "[].{Name:name, PublicAccess:properties.publicAccess}" \
+            -o table
           echo "✅ Containers configured!"
 
       # 13. Logout do Azure
