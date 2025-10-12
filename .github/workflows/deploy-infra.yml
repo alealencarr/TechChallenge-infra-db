@@ -85,21 +85,9 @@ jobs:
           echo "🔍 Important Resources:"
           echo "SQL Server: $(terraform output -raw sql_server_fqdn)"
           echo "Database: $(terraform output -raw sql_database_name)"
-          echo "Storage Account: $(terraform output -raw storage_account_name)"
+          echo "Storage Account: $(terraform output -raw storage_account_name)"     
 
-      # 10. Lista containers do Storage
-      - name: 'List Storage containers'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "📦 Listing Storage containers..."
-          STORAGE_NAME=$(terraform output -raw storage_account_name)
-          az storage container list \
-            --account-name $STORAGE_NAME \
-            --query "[].{Name:name, PublicAccess:properties.publicAccess}" \
-            -o table
-          echo "✅ Containers configured!"
-
-      # 11. Logout do Azure
+      # 10. Logout do Azure
       - name: 'Azure Logout'
         if: always()
         run: |
