@@ -1,4 +1,4 @@
-name: Deploy Infraestrutura de Dados com Terraform
+name: Deploy Infraestrutura de Dados
 
 on:
   push:
@@ -7,29 +7,116 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_SUBSCRIPTION_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).subscriptionId }}
+  ARM_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+  ARM_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+  ARM_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
 
 jobs:
   terraform:
-    name: 'Terraform'
+    name: 'Terraform Plan & Apply'
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout
+      # 1. Checkout do código
+      - name: 'Checkout code'
         uses: actions/checkout@v4
 
-      - name: Azure Login
+      # 2. Login no Azure
+      - name: 'Azure Login'
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Setup Terraform
+      # 3. Setup do Terraform
+      - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Terraform Init
-        run: terraform init
+      # 4. Terraform Format Check
+      - name: 'Terraform Format Check'
+        run: |
+          echo "🔍 Checking Terraform formatting..."
+          terraform fmt -check -recursive
+        continue-on-error: true
 
-      - name: Terraform Plan
-        run: terraform plan -out=tfplan
+      # 5. Terraform Init
+      - name: 'Terraform Init'
+        run: |
+          echo "🔧 Initializing Terraform..."
+          terraform init
+          echo "✅ Terraform initialized!"
 
-      - name: Terraform Apply
+      # 6. Terraform Validate
+      - name: 'Terraform Validate'
+        run: |
+          echo "✅ Validating Terraform configuration..."
+          terraform validate
+          echo "✅ Configuration is valid!"
+
+      # 7. Terraform Plan
+      - name: 'Terraform Plan'
+        run: |
+          echo "📋 Planning infrastructure changes..."
+          terraform plan -out=tfplan
+          echo "✅ Plan complete!"
+
+      # 8. Terraform Apply (só na main e push)
+      - name: 'Terraform Apply'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve tfplan
+        run: |
+          echo "🚀 Applying infrastructure changes..."
+          echo "💾 Creating: SQL Server, Database, Storage Account..."
+          terraform apply -auto-approve tfplan
+          echo "✅ Data infrastructure deployed successfully!"
+
+      # 9. Terraform Output
+      - name: 'Show Terraform Outputs'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "📊 Data Infrastructure Outputs:"
+          terraform output -json
+          echo ""
+          echo "🔍 Important Resources:"
+          echo "SQL Server: $(terraform output -raw sql_server_fqdn)"
+          echo "Database: $(terraform output -raw sql_database_name)"
+          echo "Storage Account: $(terraform output -raw storage_account_name)"
+
+      # 10. Verifica SQL Server (NOVO!)
+      - name: 'Verify SQL Server status'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔍 Checking SQL Server status..."
+          SQL_SERVER=$(terraform output -raw sql_server_fqdn | cut -d'.' -f1)
+          az sql server show --name $SQL_SERVER --resource-group rg-tchungry-prod --query "{name:name, state:state, fullyQualifiedDomainName:fullyQualifiedDomainName}" -o table
+          echo "✅ SQL Server is ready!"
+
+      # 11. Verifica Storage Account (NOVO!)
+      - name: 'Verify Storage Account status'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔍 Checking Storage Account status..."
+          STORAGE_NAME=$(terraform output -raw storage_account_name)
+          az storage account show --name $STORAGE_NAME --resource-group rg-tchungry-prod --query "{name:name, provisioningState:provisioningState, primaryEndpoints:primaryEndpoints.blob}" -o table
+          echo "✅ Storage Account is ready!"
+
+      # 12. Lista containers do Storage (NOVO!)
+      - name: 'List Storage containers'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "📦 Listing Storage containers..."
+          STORAGE_NAME=$(terraform output -raw storage_account_name)
+          az storage container list --account-name $STORAGE_NAME --query "[].{Name:name, PublicAccess:properties.publicAccess}" -o table
+          echo "✅ Containers configured!"
+
+      # 13. Logout do Azure
+      - name: 'Azure Logout'
+        if: always()
+        run: |
+          az logout
+          echo "✅ Logged out from Azure"
